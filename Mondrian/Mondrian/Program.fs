@@ -122,15 +122,15 @@ let contrastize grain (color: float * float * float) =
 /// A proportion of the clearest boxes are painted pure white. 
 let colorize (img: Bitmap) (rng: Random) (white: float) (contrast: float) (boxes: Box[]) =
     let count = Array.length boxes
-    let colorized = (white * (float)count) |> (int)
+    let whitened = (white * (float)count) |> (int)
     let colors = 
         boxes 
         |> Array.map (fun box -> box, average img rng box)
-        |> Array.sortBy (fun (box, color) -> whiteness color)
+        |> Array.sortBy (fun (box, color) -> - whiteness color)
         |> Array.mapi (fun i (box, color) ->
-              if i < colorized 
-              then (box, contrastize contrast color)
-              else (box, Color.White))
+              if i < whitened 
+              then (box, Color.White)
+              else (box, contrastize contrast color))
         |> Array.iter (fun (box, color) ->
             for x in box.Left .. box.Right do
                 for y in box.Bottom .. box.Top do
@@ -179,8 +179,8 @@ let minWidth width height =
 let main argv = 
     
     // Replace the image path by something adequate...
-    let sourceFile = @"C:\Users\Mathias\Desktop\TournesolPendule.jpg"
-    let targetFile = @"C:\Users\Mathias\Desktop\Mondrian-TournesolPendule.png"
+    let sourceFile = @"C:\Users\Mathias Brandewinder\Desktop\van-gogh.jpg"
+    let targetFile = @"C:\Users\Mathias Brandewinder\Desktop\Mondrianized.png"
     
     use image = new Bitmap(sourceFile)
     let width, height = image.Width, image.Height
@@ -189,7 +189,7 @@ let main argv =
 
     let cuts = 10 // random cuts attempted at each step
     let depth = 50 // "search" depth
-    let white = 0.3 // proportion of boxes rendered white
+    let white = 0.4 // proportion of boxes rendered white
     let contrast = 32. // rounding factor to simplify colors
 
     let rng = Random()
