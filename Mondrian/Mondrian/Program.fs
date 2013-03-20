@@ -9,29 +9,38 @@ type Box =
       Bottom: int; 
       Left: int; 
       Right: int }
+    member this.Width = this.Right - this.Left + 1
+    member this.Height = this.Top - this.Bottom + 1
+    member this.Surface = this.Width * this.Height
 
 /// Maximum points that will be sampled in a box.
 let maxSample = 100
 
-/// Computes number of points to sample in a box.
-let sampler (box: Box) = 
-    let width = abs (box.Left - box.Right + 1)
-    let height = abs (box.Top - box.Bottom + 1)
-    width * height |> min maxSample
+/// Converts an index into coordinates.
+let coords (box: Box) index =
+    let row = index / box.Width
+    let col = index % box.Width
+    (box.Left + col, box.Bottom + row)
+
+/// Computes a sample of coordinates from a box
+let sampler (box: Box) =
+    seq {
+        if box.Surface <= maxSample
+        then
+            for x in box.Left .. box.Right do
+                for y in box.Bottom .. box.Top do yield (x, y) 
+        else
+            let step = (float)box.Surface / (float)maxSample
+            for i in 0. .. step .. (float)(box.Surface - 1) do
+                yield coords box ((int)i) }
 
 /// Compute the "average" color of a box, 
 /// by sampling random points in it.
-let average (img: Bitmap) (rng: Random) (box: Box) =
-    let sampleSize = sampler box
-    let minx = min box.Left box.Right
-    let maxx = max box.Left box.Right
-    let miny = min box.Top box.Bottom
-    let maxy = max box.Top box.Bottom
-    let sample = seq {
-        for i in 1 .. sampleSize do
-            let x = rng.Next(minx, maxx + 1)
-            let y = rng.Next(miny, maxy + 1)
-            yield img.GetPixel(x, y) }
+let average (img: Bitmap) (box: Box) =
+    let sample = 
+        box 
+        |> sampler
+        |> Seq.map (fun (x, y) -> img.GetPixel(x, y))
     let red = sample |> Seq.averageBy (fun pix -> (float)pix.R)
     let green = sample |> Seq.averageBy (fun pix -> (float)pix.G)
     let blue = sample |> Seq.averageBy (fun pix -> (float)pix.B)
@@ -72,7 +81,7 @@ let split (img: Bitmap) (rng: Random) cuts margin box =
     | pairs ->
           pairs 
           |> List.maxBy (fun (box1, box2) -> 
-                 distance (average img rng box1) (average img rng box2))
+                 distance (average img box1) (average img box2))
           |> Some
 
 /// Given a current division of image into boxes,
@@ -125,7 +134,7 @@ let colorize (img: Bitmap) (rng: Random) (white: float) (contrast: float) (boxes
     let whitened = (white * (float)count) |> (int)
     let colors = 
         boxes 
-        |> Array.map (fun box -> box, average img rng box)
+        |> Array.map (fun box -> box, average img box)
         |> Array.sortBy (fun (box, color) -> - whiteness color)
         |> Array.mapi (fun i (box, color) ->
               if i < whitened 
@@ -179,7 +188,7 @@ let minWidth width height =
 let main argv = 
     
     // Replace the image path by something adequate...
-    let sourceFile = @"C:\Users\Mathias Brandewinder\Desktop\van-gogh.jpg"
+    let sourceFile = @"C:\Users\Mathias Brandewinder\Desktop\MonaLisa.png"
     let targetFile = @"C:\Users\Mathias Brandewinder\Desktop\Mondrianized.png"
     
     use image = new Bitmap(sourceFile)
