@@ -23,16 +23,15 @@ let coords (box: Box) index =
     (box.Left + col, box.Bottom + row)
 
 /// Computes a sample of coordinates from a box
-let sampler (box: Box) =
-    seq {
-        if box.Surface <= maxSample
-        then
-            for x in box.Left .. box.Right do
-                for y in box.Bottom .. box.Top do yield (x, y) 
-        else
-            let step = (float)box.Surface / (float)maxSample
-            for i in 0. .. step .. (float)(box.Surface - 1) do
-                yield coords box ((int)i) }
+let sampler (box: Box) = seq {
+    if box.Surface <= maxSample
+    then
+        for x in box.Left .. box.Right do
+            for y in box.Bottom .. box.Top do yield (x, y) 
+    else
+        let step = (float)box.Surface / (float)maxSample
+        for i in 0. .. step .. (float)(box.Surface - 1) do
+            yield coords box ((int)i) }
 
 /// Compute the "average" color of a box, 
 /// by sampling random points in it.
@@ -53,24 +52,16 @@ let inline distance (r1, g1, b1) (r2, g2, b2) =
 /// Split a box into 2 parts, by attempting
 /// random splits and taking the split that
 /// maximizes color difference between the areas.
-let split (img: Bitmap) (rng: Random) cuts margin box =
+let split (img: Bitmap) margin box =
     // Construct a list of possible box splits
     let attempts = [
         // Constructs random vertical cuts.
-        let minx = min box.Left box.Right
-        let maxx = max box.Left box.Right
-        if (minx + margin < maxx - margin) then
-            for i in 1 .. cuts do
-                let cut = rng.Next(minx + margin, maxx + 1 - margin)
+        for cut in box.Left + margin .. box.Right - margin do
                 let box1 = { box with Right = cut }
                 let box2 = { box with Left = cut + 1 }
                 yield (box1, box2)
         // Construct random horizontal cuts.
-        let miny = min box.Top box.Bottom
-        let maxy = max box.Top box.Bottom
-        if (miny + margin < maxy - margin) then
-            for i in 1 .. cuts do
-                let cut = rng.Next(miny + margin, maxy + 1 - margin)
+        for cut in box.Bottom + margin .. box.Top - margin do
                 let box1 = { box with Top = cut }
                 let box2 = { box with Bottom = cut + 1 }
                 yield (box1, box2) ]
@@ -88,7 +79,7 @@ let split (img: Bitmap) (rng: Random) cuts margin box =
 /// create next generation by splitting a random Box 
 /// from the current Boxes.
 let spawn (rng: Random) 
-          (splitter: Box -> (Box*Box) option) 
+          (splitter: Box -> (Box * Box) option) 
           (boxes: Box[]) =
     let count = Array.length boxes
     let boxIndex = rng.Next(count)
@@ -102,11 +93,11 @@ let spawn (rng: Random)
            else yield boxes.[i] |]
 
 /// Recursively create boxes that cover the starting image
-let boxize (img: Bitmap) (rng: Random) cuts margin (depth: int) =
+let boxize (img: Bitmap) (rng: Random) margin (depth: int) =
     let width = img.Width
     let height = img.Height
     let box = { Left = 0; Right = width - 1; Top = height - 1; Bottom = 0}
-    let splitter = split img rng cuts margin
+    let splitter = split img margin
     let rec fragment boxes gen =
         match (gen >= depth) with
         | true -> boxes
@@ -129,7 +120,7 @@ let contrastize grain (color: float * float * float) =
     Color.FromArgb(roundize r grain, roundize g grain, roundize b grain)
 /// Paint each box based on its average color.
 /// A proportion of the clearest boxes are painted pure white. 
-let colorize (img: Bitmap) (rng: Random) (white: float) (contrast: float) (boxes: Box[]) =
+let colorize (img: Bitmap) (white: float) (contrast: float) (boxes: Box[]) =
     let count = Array.length boxes
     let whitened = (white * (float)count) |> (int)
     let colors = 
@@ -176,19 +167,20 @@ let borderize (img: Bitmap) (margin: int) (boxes: Box[]) =
 
 /// Utilities to determine adequate black margin width
 let marginWidth width height = 
-    (min width height) / 200
+    1 + (min width height) / 200
 
 /// Utility to determine adequate minimum box edge
 let minWidth width height = 
     let borders = 2 * (marginWidth width height)
-    let edge = (min width height) / 10
+    let edge = (min width height) / 8
     max edge borders
 
 [<EntryPoint>]
 let main argv = 
     
     // Replace the image path by something adequate...
-    let sourceFile = @"C:\Users\Mathias Brandewinder\Desktop\MonaLisa.png"
+    // let sourceFile = @"C:\Users\Mathias Brandewinder\Desktop\MonaLisa.png"
+    let sourceFile = @"C:\Users\Mathias Brandewinder\Desktop\van-gogh.jpg"
     let targetFile = @"C:\Users\Mathias Brandewinder\Desktop\Mondrianized.png"
     
     use image = new Bitmap(sourceFile)
@@ -196,15 +188,14 @@ let main argv =
     let margin = marginWidth width height
     let edges = minWidth width height
 
-    let cuts = 10 // random cuts attempted at each step
-    let depth = 50 // "search" depth
+    let depth = 20 // "search" depth
     let white = 0.4 // proportion of boxes rendered white
     let contrast = 32. // rounding factor to simplify colors
 
     let rng = Random()
 
-    let boxes = boxize image rng cuts edges depth    
-    let colorized = colorize image rng white contrast boxes
+    let boxes = boxize image rng edges depth    
+    let colorized = colorize image white contrast boxes
     let borderized = borderize colorized margin boxes
 
     borderized.Save(targetFile, Imaging.ImageFormat.Png)
