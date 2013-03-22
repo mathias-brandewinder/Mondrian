@@ -13,6 +13,8 @@ type Box =
     member this.Height = this.Top - this.Bottom + 1
     member this.Surface = this.Width * this.Height
 
+type Colorizer = Bitmap -> Box [] -> (Box * Color) []
+
 /// Maximum points that will be sampled in a box.
 let maxSample = 100
 
@@ -118,24 +120,19 @@ let roundize value grain =
 let contrastize grain (color: float * float * float) =
     let r, g, b = color
     Color.FromArgb(roundize r grain, roundize g grain, roundize b grain)
-/// Paint each box based on its average color.
-/// A proportion of the clearest boxes are painted pure white. 
-let colorize (img: Bitmap) (white: float) (contrast: float) (boxes: Box[]) =
-    let count = Array.length boxes
-    let whitened = (white * (float)count) |> (int)
-    let colors = 
-        boxes 
-        |> Array.map (fun box -> box, average img box)
-        |> Array.sortBy (fun (box, color) -> - whiteness color)
-        |> Array.mapi (fun i (box, color) ->
-              if i < whitened 
-              then (box, Color.White)
-              else (box, contrastize contrast color))
-        |> Array.iter (fun (box, color) ->
-            for x in box.Left .. box.Right do
-                for y in box.Bottom .. box.Top do
-                    let pixel = img.GetPixel(x, y)
-                    img.SetPixel(x, y, color))
+
+let colorsPicker (img: Bitmap) (boxes: Box []) =
+    boxes
+    |> Array.map (fun box -> box, (average img box) |> contrastize 32.)
+    
+/// Assign a color to each box and paint it.
+let colorize (img: Bitmap) (boxes: Box[]) (colorizer: Colorizer) =
+    let graphics = Graphics.FromImage(img)   
+    colorizer img boxes
+    |> Array.iter (fun (box, color) ->
+        let brush = new SolidBrush(color)
+        let rectangle = Rectangle(box.Left, box.Bottom, box.Width, box.Height)
+        graphics.FillRectangle(brush, rectangle))        
     img
 
 /// Paint the black borders around each Box.
@@ -188,14 +185,14 @@ let main argv =
     let margin = marginWidth width height
     let edges = minWidth width height
 
-    let depth = 20 // "search" depth
-    let white = 0.4 // proportion of boxes rendered white
+    let depth = 50 // "search" depth
+    let white = 0. // proportion of boxes rendered white
     let contrast = 32. // rounding factor to simplify colors
 
     let rng = Random()
 
     let boxes = boxize image rng edges depth    
-    let colorized = colorize image white contrast boxes
+    let colorized = colorize image boxes colorsPicker
     let borderized = borderize colorized margin boxes
 
     borderized.Save(targetFile, Imaging.ImageFormat.Png)
