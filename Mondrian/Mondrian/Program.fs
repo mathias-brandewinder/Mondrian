@@ -124,15 +124,17 @@ let contrastize grain (color: float * float * float) =
 let colorsPicker (img: Bitmap) (boxes: Box []) =
     boxes
     |> Array.map (fun box -> box, (average img box) |> contrastize 32.)
+
+let fill (img: Bitmap) (box: Box) (color: Color) =
+    let graphics = Graphics.FromImage(img)   
+    let brush = new SolidBrush(color)
+    let rectangle = Rectangle(box.Left, box.Bottom, box.Width, box.Height)
+    graphics.FillRectangle(brush, rectangle)      
     
 /// Assign a color to each box and paint it.
 let colorize (img: Bitmap) (boxes: Box[]) (colorizer: Colorizer) =
-    let graphics = Graphics.FromImage(img)   
     colorizer img boxes
-    |> Array.iter (fun (box, color) ->
-        let brush = new SolidBrush(color)
-        let rectangle = Rectangle(box.Left, box.Bottom, box.Width, box.Height)
-        graphics.FillRectangle(brush, rectangle))        
+    |> Array.iter (fun (box, color) -> fill img box color)
     img
 
 /// Paint the black borders around each Box.
@@ -142,24 +144,16 @@ let borderize (img: Bitmap) (margin: int) (boxes: Box[]) =
     let borders box = seq {
         if margin > 0 then
             if box.Bottom > 0 then
-                for x in box.Left .. box.Right do 
-                    for m in 0 .. margin do
-                        yield (x, box.Bottom + m)
+                yield { box with Top = box.Bottom + margin }
             if box.Top < (height - 1) then
-                for x in box.Left .. box.Right do 
-                    for m in 0 .. margin do
-                        yield (x, box.Top - m) 
+                yield { box with Bottom = box.Top - margin }
             if box.Left > 0 then
-                for y in box.Bottom .. box.Top do 
-                    for m in 0 .. margin do
-                        yield (box.Left + m, y)
+                yield { box with Right = box.Left + margin }
             if box.Right < width - 1 then
-                for y in box.Bottom .. box.Top do 
-                    for m in 0 .. margin do
-                        yield (box.Right - m, y) } 
+                yield { box with Left = box.Right - margin } }
     boxes 
     |> Seq.collect (fun box -> borders box) 
-    |> Seq.iter (fun (x, y) -> img.SetPixel(x, y, Color.Black))
+    |> Seq.iter (fun box -> fill img box Color.Black)
     img
 
 /// Utilities to determine adequate black margin width
@@ -176,7 +170,7 @@ let minWidth width height =
 let main argv = 
     
     // Replace the image path by something adequate...
-    // let sourceFile = @"C:\Users\Mathias Brandewinder\Desktop\MonaLisa.png"
+//    let sourceFile = @"C:\Users\Mathias Brandewinder\Desktop\MonaLisa.png"
     let sourceFile = @"C:\Users\Mathias Brandewinder\Desktop\van-gogh.jpg"
     let targetFile = @"C:\Users\Mathias Brandewinder\Desktop\Mondrianized.png"
     
@@ -185,7 +179,7 @@ let main argv =
     let margin = marginWidth width height
     let edges = minWidth width height
 
-    let depth = 50 // "search" depth
+    let depth = 30 // "search" depth
     let white = 0. // proportion of boxes rendered white
     let contrast = 32. // rounding factor to simplify colors
 
