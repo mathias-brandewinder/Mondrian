@@ -14,6 +14,7 @@ type Box =
     member this.Surface = this.Width * this.Height
 
 type Colorizer = Bitmap -> Box [] -> (Box * Color) []
+type BoxDifference = Bitmap -> (Box * Box) -> float
 
 /// Maximum points that will be sampled in a box.
 let maxSample = 100
@@ -54,7 +55,7 @@ let inline distance (r1, g1, b1) (r2, g2, b2) =
 /// Split a box into 2 parts, by attempting
 /// random splits and taking the split that
 /// maximizes color difference between the areas.
-let split (img: Bitmap) margin box =
+let split (img: Bitmap) (diff: BoxDifference) margin box =
     // Construct a list of possible box splits
     let attempts = [
         // Constructs random vertical cuts.
@@ -73,8 +74,7 @@ let split (img: Bitmap) margin box =
     | []    -> None
     | pairs ->
           pairs 
-          |> List.maxBy (fun (box1, box2) -> 
-                 distance (average img box1) (average img box2))
+          |> List.maxBy (fun (box1, box2) -> diff img (box1, box2))
           |> Some
 
 /// Given a current division of image into boxes,
@@ -95,11 +95,11 @@ let spawn (rng: Random)
            else yield boxes.[i] |]
 
 /// Recursively create boxes that cover the starting image
-let boxize (img: Bitmap) (rng: Random) margin (depth: int) =
+let boxize (img: Bitmap) (rng: Random) (diff: BoxDifference) margin (depth: int) =
     let width = img.Width
     let height = img.Height
     let box = { Left = 0; Right = width - 1; Top = height - 1; Bottom = 0}
-    let splitter = split img margin
+    let splitter = split img diff margin
     let rec fragment boxes gen =
         match (gen >= depth) with
         | true -> boxes
@@ -184,8 +184,8 @@ let main argv =
     let contrast = 32. // rounding factor to simplify colors
 
     let rng = Random()
-
-    let boxes = boxize image rng edges depth    
+    let diff = (fun (bmp: Bitmap) ((b1, b2): (Box*Box)) -> distance (average bmp b1) (average bmp b2))
+    let boxes = boxize image rng diff edges depth    
     let colorized = colorize image boxes colorsPicker
     let borderized = borderize colorized margin boxes
 
